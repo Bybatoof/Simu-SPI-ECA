@@ -41,6 +41,9 @@ void loop() {
     Serial.print(incomingByte);
     Serial.print("\n");
     switch (incomingByte) {
+      case (0) :
+        CmdSPI_Reset();
+        break;
       case (1) :
         CmdSPI_Statut();
         break;
@@ -56,7 +59,7 @@ void loop() {
         CmdSPI_Dfocable(result);
         break;
       case (5) :
-        CmdSPI_Config(0x01, 0xAA55);
+        CmdSPI_Config(SPI_CABLE_PTB, 3000); // PTB de 30m
         break;
       case (6) :
         CmdSPI_StartReflecto();
@@ -96,16 +99,17 @@ void Aff_Menu(void) {
   int i = 0;
 
   Serial.print("\n");
-  Serial.print("1 => Statut\n");
-  Serial.print("2 => Defaut\n");
-  Serial.print("3 => Lecture reflecto\n");
-  Serial.print("4 => Lecture defaut cable\n");
-  Serial.print("5 => Config mesure\n");
-  Serial.print("6 => Lancement reflecto\n");
-  Serial.print("7 => Autotest\n");
-  Serial.print("8 => VHDL App ID\n");
-  Serial.print("9 => VHDL Rev\n");
-  Serial.print("\nCommande ??\n");
+  Serial.print("                                              0 => Reset\n");
+  Serial.print("                                              1 => Statut\n");
+  Serial.print("                                              2 => Defaut\n");
+  Serial.print("                                              3 => Lecture reflecto\n");
+  Serial.print("                                              4 => Lecture defaut cable\n");
+  Serial.print("                                              5 => Config mesure\n");
+  Serial.print("                                              6 => Lancement reflecto\n");
+  Serial.print("                                              7 => Autotest\n");
+  Serial.print("                                              8 => VHDL App ID\n");
+  Serial.print("                                              9 => VHDL Rev\n");
+  Serial.print("\n                                              Commande ??\n");
   
   // return the result:
   return;
@@ -184,26 +188,29 @@ unsigned long CmdSPI_Statut(void) {
   result = result & MASK_READ_STATUT;
 
   switch (result) {
-    case (0x0000):
+    case (SPI_STATUT_INIT):
       Serial.print("Statut = Init en cours\n");
       break;
-    case (0x0001):
+    case (SPI_STATUT_ATTCONF):
       Serial.print("Statut = Attente Config\n");
       break;
-    case (0x0002):
-      Serial.print("Statut = Prêt\n");
+    case (SPI_STATUT_PRET):
+      Serial.print("Statut = Pret\n");
       break;
-    case (0x0003):
+    case (SPI_STATUT_REFLINPROG):
       Serial.print("Statut = Reflecto en cours\n");
       break;
-    case (0x0004):
+    case (SPI_STATUT_REFLRDY):
       Serial.print("Statut = Reflecto et traitement dispo\n");
       break;
-    case (0x0005):
+    case (SPI_STATUT_AUTOTST):
       Serial.print("Statut = Autotest en cours\n");
       break;
-    case (0x0006):
+    case (SPI_STATUT_DEFAUT):
       Serial.print("Statut = Defaut\n");
+      break;
+    case (SPI_STATUT_RESET):
+      Serial.print("Statut = Reset\n");
       break;
     default:
       Serial.print("Statut inconnu\n");
@@ -239,16 +246,16 @@ unsigned long CmdSPI_Defaut(void) {
   result = result & MASK_READ_DEFAUT;
 
   switch (result) {
-    case (0x0000):
+    case (SPI_DEFAUT_RAS):
       Serial.print("Defaut = Pas de defaut\n");
       break;
-    case (0x0001):
+    case (SPI_DEFAUT_PBALIM):
       Serial.print("Defaut = Defaut alimentation\n");
       break;
-    case (0x0002):
+    case (SPI_DEFAUT_PBDACADC):
       Serial.print("Defaut = Defaut DAC/ADC\n");
       break;
-    case (0x0003):
+    case (SPI_DEFAUT_PBOMTDR):
       Serial.print("Defaut = Defaut mesure OMTDR\n");
       break;
     default:
@@ -270,6 +277,7 @@ unsigned long CmdSPI_NbPtReflecto(void) {
   unsigned long result = 0;   // result to return
   byte writespi[4] = {0,0,0,0};
 
+// Nbre de points total
   writespi[0] = CMDSPI_NBPTREFLEC;
    // Enable SS
   digitalWrite(SlaveSelect, LOW);
@@ -280,10 +288,25 @@ unsigned long CmdSPI_NbPtReflecto(void) {
   digitalWrite(SlaveSelect, HIGH);
   
   result = result & MASK_READ_NBPTREFLEC;
-  Serial.print("Nbr de points de reflecto a lire = ");
+  Serial.print("Nbr de points de reflecto total = ");
   Serial.print(result);
   Serial.print("\n");
+
+// Nbre de points restant à lire
+  writespi[0] = CMDSPI_PNTPTREFLEC;
+  // Enable SS
+  digitalWrite(SlaveSelect, LOW);
+  // Commande SPI
+  WriteSPI(1,writespi);
+  result = ReadSPI(3);
+  //Disable SS
+  digitalWrite(SlaveSelect, HIGH);
   
+  result = result & MASK_READ_PNTPTREFLEC;
+  Serial.print("Nbr de points de reflecto restant a lire = ");
+  Serial.print(result);
+  Serial.print("\n");
+ 
   return (result);
 }
 
@@ -335,6 +358,7 @@ unsigned long CmdSPI_NbPtDfocable(void) {
   unsigned long result = 0;   // result to return
   byte writespi[4] = {0,0,0,0};
 
+// Nbre de points total
   writespi[0] = CMDSPI_NBDFOCABLE;
    // Enable SS
   digitalWrite(SlaveSelect, LOW);
@@ -345,7 +369,22 @@ unsigned long CmdSPI_NbPtDfocable(void) {
   digitalWrite(SlaveSelect, HIGH);
   
   result = result & MASK_READ_NBDFOCABLE;
-  Serial.print("Nbr de points de defaut a lire = ");
+  Serial.print("Nbr de points de defaut total = ");
+  Serial.print(result);
+  Serial.print("\n");
+
+// Nbre de points restant à lire
+  writespi[0] = CMDSPI_PNTDFOCABLE;
+  // Enable SS
+  digitalWrite(SlaveSelect, LOW);
+  // Commande SPI
+  WriteSPI(1,writespi);
+  result = ReadSPI(3);
+  //Disable SS
+  digitalWrite(SlaveSelect, HIGH);
+  
+  result = result & MASK_READ_PNTDFOCABLE;
+  Serial.print("Nbr de points de defaut restant a lire = ");
   Serial.print(result);
   Serial.print("\n");
   
@@ -362,7 +401,6 @@ unsigned long CmdSPI_NbPtDfocable(void) {
 /////////////////////////////////////////////////////////
 void CmdSPI_Dfocable(unsigned long nb_dfo) {
   unsigned long result = 0;   // result to return
-  unsigned long result1 = 0;   // result to return
   unsigned long result2 = 0;   // result to return
   byte writespi[4] = {0,0,0,0};
   unsigned long i = 0;
@@ -382,13 +420,31 @@ void CmdSPI_Dfocable(unsigned long nb_dfo) {
     
     result2 = result & MASK_READ_NUMDFOCABLE;
     result2 = result2 >> 16;
-    Serial.print("Numéro défaut = \n");
+    Serial.print("    Numero defaut      = ");
     Serial.print(result2);
     Serial.print("\n");
-    result1 = result & MASK_READ_DFOCABLE;
-    Serial.print("Emplacement défaut = \n");
-    Serial.print(result1);
-    Serial.print("\n");
+
+    Serial.print("    Type defaut        = ");
+    result2 = result & MASK_READ_TYPDFOCABLE;
+    switch (result2) {
+      case (SPI_DFOCAB_RAS) :
+        Serial.print("Pas de defaut\n");
+        break;
+      case (SPI_DFOCAB_CC) :
+        Serial.print("Defaut en Circuit Fermé\n");
+        break;
+      case (SPI_DFOCAB_CO) :
+        Serial.print("Defaut en Circuit Ouvert\n");
+        break;
+      default :
+        Serial.print("Commande inconnue !!!\n");
+        break;
+    }
+
+    result2 = result & MASK_READ_DFOCABLE;
+    Serial.print("    Emplacement defaut = ");
+    Serial.print(result2);
+    Serial.print(" cm\n");
   }
   
   Serial.print("Fin defaut\n");
@@ -437,11 +493,12 @@ void CmdSPI_Config(byte cabletype, unsigned int cablelength) {
 /////////////////////////////////////////////////////////
 void CmdSPI_StartReflecto(void) {
   unsigned long result = 0;   // result to return
-  byte writespi[4] = {0,0,0,1};
+  byte writespi[4] = {0,0,0,0};
   unsigned long i = 0;
 
   Serial.print("Lancement Reflecto \n");
-  writespi[0] = CMDSPI_STARTREFLEC;
+  writespi[0] = CMDSPI_LCMTACT;
+  writespi[3] = SPI_ACTION_STRTMEAS;
     
   // Enable SS
   digitalWrite(SlaveSelect, LOW);
@@ -468,8 +525,38 @@ void CmdSPI_Autotest(void) {
   byte writespi[4] = {0,0,0,0};
   unsigned long i = 0;
 
-  Serial.print("Autotest \n");
-  writespi[0] = CMDSPI_BIT;
+  Serial.print("Lancement Autotest \n");
+  writespi[0] = CMDSPI_LCMTACT;
+  writespi[3] = SPI_ACTION_AUTOTST;
+    
+  // Enable SS
+  digitalWrite(SlaveSelect, LOW);
+  // Commande SPI
+  WriteSPI(4,writespi);
+  //Disable SS
+  digitalWrite(SlaveSelect, HIGH);
+
+  Serial.print("Done !!!\n");
+
+  return;
+}
+
+
+/////////////////////////////////////////////////////////
+//Command SPI : RESET
+//
+//INPUT = void
+//
+//OUTPUT = void
+/////////////////////////////////////////////////////////
+void CmdSPI_Reset(void) {
+  unsigned long result = 0;   // result to return
+  byte writespi[4] = {0,0,0,0};
+  unsigned long i = 0;
+
+  Serial.print("Lancement Reflecto \n");
+  writespi[0] = CMDSPI_LCMTACT;
+  writespi[3] = SPI_ACTION_RESET;
     
   // Enable SS
   digitalWrite(SlaveSelect, LOW);
@@ -542,5 +629,6 @@ unsigned long CmdSPI_VhdlRev(void) {
 
   return (result);
 }
+
 
 
